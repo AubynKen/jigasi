@@ -17,7 +17,12 @@
  */
 package org.jitsi.jigasi.transcription;
 
+import com.google.common.collect.ImmutableMap;
+import org.jitsi.jigasi.JigasiBundleActivator;
+
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * This class manages the translations to be done by the transcriber.
@@ -44,6 +49,63 @@ public class TranslationManager
      * The translationService to be used for translations.
      */
     private final TranslationService translationService;
+
+    /**
+     *
+     */
+    public static final String P_NAME_ENABLE_PARTIAL_TRANSLATION = "hi"; // TODO: here
+
+    /**
+     * Whether interim transcripts should be translated
+     */
+    public static final String ENABLE_PARTIAL_TRANSLATION = JigasiBundleActivator.getConfigurationService()
+        .getString(P_NAME_ENABLE_PARTIAL_TRANSLATION, null);
+
+    /**
+     * The subject(s)-object(o)-verb(v) order of language supported in Jitsi.
+     * Used for determining whether it is appropriate to do translation on interim/partial transcripts.
+     */
+    private static final Map<String, String> languageWordOrder = Stream.of(new String[][] {
+            {"af", "svo"},
+            {"id", "svo"},
+            {"ms", "svo"},
+            {"ca", "svo"},
+            {"cs", "svo"},
+            {"da", "svo"},
+            {"en", "svo"},
+            {"es", "svo"},
+            {"fr", "svo"},
+            {"gl", "svo"},
+            {"hr", "svo"},
+            {"zu", "vo"}, // the subject is part of the verb compound
+            {"is", "svo"},
+            {"it", "svo"},
+            {"hu", "svo"},
+            {"nl", "svo"},
+            {"nb", "svo"},
+            {"pl", "svo"},
+            {"pt", "svo"},
+            {"ro", "svo"},
+            {"sk", "svo"},
+            {"sl", "sov"},
+            {"fi", "svo"},
+            {"sv", "svo"},
+            {"vn", "svo"},
+            {"tr", "sov"},
+            {"el", "svo"},
+            {"bg", "svo"},
+            {"ru", "svo"},
+            {"sr", "svo"},
+            {"uk", "svo"},
+            {"he", "svo"},
+            {"ar", "vso"},
+            {"fa", "sov"},
+            {"hi", "sov"},
+            {"th", "svo"},
+            {"ko", "sov"},
+            {"jp", "sov"},
+            {"zh", "svo"},
+    }).collect(Collectors.toMap(data -> data[0], data -> data[1]));
 
     /**
      * Initializes the translationManager with a TranslationService
@@ -191,5 +253,20 @@ public class TranslationManager
     public void failed(FailureReason reason)
     {
         completed();
+    }
+
+    /**
+     * Returns whether the source language and target language of translation have the same word order.
+     * Word order is defined by the order in which the subject, object and verb are used in a phrase.
+     * @param sourceLang the source language of to translate from
+     * @param targetLang the target language to translate to
+     * @return whether {@code sourceLang} have matching word order with {@code targetLang}
+     */
+    public boolean hasSameWordOrder(String sourceLang, String targetLang)
+    {
+        String sourceWordOrder = languageWordOrder.getOrDefault(sourceLang, null);
+        String targetWordOrder = languageWordOrder.getOrDefault(targetLang, null);
+        if (sourceWordOrder == null || targetWordOrder == null) return false;
+        return sourceWordOrder.equals(targetWordOrder);
     }
 }

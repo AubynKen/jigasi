@@ -101,7 +101,7 @@ Using Jigasi to transcribe a Jitsi Meet conference
 ==================================================
 
 It is also possible to use Jigasi as a provider of nearly real-time transcription
-while a conference is ongoing as well as serving a complete transcription
+as well as translation while a conference is ongoing as well as serving a complete transcription
 after the conference is over. This can be done by using the SIP dial button and 
 using the URI `jitsi_meet_transcribe`. 
 Currently Jigasi can send speech-to-text results to
@@ -127,7 +127,7 @@ gcloud init
 gcloud auth application-default login
 ```
 
-Vosk configuration
+Vosk configuration for transcription
 ==================
 
 To use [Vosk speech recognition server](https://github.com/alphacep/vosk-server)
@@ -141,6 +141,38 @@ Then configure the transcription class with the following properly in `~/jigasi/
 
 ```
 org.jitsi.jigasi.transcription.customService=org.jitsi.jigasi.transcription.VoskTranscriptionService
+```
+LibreTranslate configuration for translation
+==================
+
+To use [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate)
+for translation, configure the following properties in `~/jigasi/jigasi-home/sip-communicator.properties`:
+
+```
+org.jitsi.jigasi.transcription.translationService=org.jitsi.jigasi.transcription.LibreTranslateTranslationService
+org.jitsi.jigasi.transcription.libreTranslate.api_url=http://localhost:5000/translate
+```
+
+Run the docker container along with Jigasi:
+```
+docker run -d -p 5000:5000 libretranslate/libretranslate
+```
+Note that by default, the LibreTranslate server downloads all language models
+before starting to listen to requests. You may refer to the 
+[documentation](https://github.com/LibreTranslate/LibreTranslate/blob/main/README.md)
+to set up a volume or set the available languages to reduce download time.
+
+Finally, configure the websocket URL of the VOSK service in `~/jigasi/jigasi-home/sip-communicator.properties`:
+
+If you only have one VOSK service:
+
+```
+# org.jitsi.jigasi.transcription.vosk.websocket_url=ws://localhost:2700
+```
+
+If you have multiple VOSK services:
+```
+# org.jitsi.jigasi.transcription.vosk.websocket_url={"en": "ws://localhost:2700", "fr": "ws://localhost:2710"}
 ```
 
 Transcription options
@@ -277,17 +309,6 @@ That room needs to be configured in jicofo with the following property:
 `org.jitsi.jicofo.jigasi.BREWERY=JigasiBrewery@internal.auth.meet.example.com` or in the new jicofo config:
 `hocon -f /etc/jitsi/jicofo/jicofo.conf set jicofo.jigasi.brewery-jid '"JigasiBrewery@internal.auth.meet.example.com"'`
 Where prosody needs to have a registered muc component: `internal.auth.meet.example.com`.
-
-You can configure and per XMPP account callstats account, a jigasi instance can 
-serve several deployments/domains:
-```
-net.java.sip.communicator.impl.protocol.jabber.acc-xmpp-1.CallStats.appId=...
-net.java.sip.communicator.impl.protocol.jabber.acc-xmpp-1.CallStats.keyId=...
-net.java.sip.communicator.impl.protocol.jabber.acc-xmpp-1.CallStats.keyPath=/etc/jitsi/jigasi/ecpriv.jwk
-net.java.sip.communicator.impl.protocol.jabber.acc-xmpp-1.CallStats.conferenceIDPrefix=meet.example.com
-net.java.sip.communicator.impl.protocol.jabber.acc-xmpp-1.CallStats.jigasiId=<id-of-this-instance-visible-in-callstats>
-net.java.sip.communicator.impl.protocol.jabber.acc-xmpp-1.CallStats.STATISTICS_INTERVAL=60000
-``` 
 
 The configuration for the XMPP control MUCs that jigasi uses can be modified at 
 run time using REST calls to `/configure/`.

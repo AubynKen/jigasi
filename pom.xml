@@ -14,7 +14,7 @@
 
   <properties>
     <assembly.skipAssembly>true</assembly.skipAssembly>
-    <jitsi-desktop.version>2.14.08fd0a8ee</jitsi-desktop.version>
+    <jitsi-desktop.version>2.14.8169c709f</jitsi-desktop.version>
     <jitsi-desktop.groupId>org.jitsi.desktop</jitsi-desktop.groupId>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <slf4j.version>1.7.36</slf4j.version>
@@ -213,11 +213,6 @@
       <groupId>${jitsi-desktop.groupId}</groupId>
       <artifactId>jitsi-packetlogging</artifactId>
       <version>${jitsi-desktop.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>${project.groupId}</groupId>
-      <artifactId>jitsi-stats</artifactId>
-      <version>1.0-15-ga3c317f</version>
     </dependency>
     <!-- runtime -->
     <dependency>

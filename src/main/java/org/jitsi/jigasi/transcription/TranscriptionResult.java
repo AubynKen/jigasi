@@ -260,4 +260,20 @@ public class TranscriptionResult
     {
         return participant;
     }
+
+    /**
+     * Return the word count of the transcription result.
+     * If multiple alternatives exist, return the word count of the first alternative.
+     * @return the number of words in the transcription result.
+     */
+    public int getWordCount()
+    {
+        String transcript = alternatives.iterator().next().getTranscription();
+        if (transcript == null || transcript.isEmpty())
+        {
+            return 0;
+        }
+        String[] transcriptWords = transcript.split("\\s+");
+        return transcriptWords.length;
+    }
 }

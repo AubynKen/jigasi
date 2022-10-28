@@ -17,7 +17,11 @@
  */
 package org.jitsi.jigasi.transcription;
 
+import org.jitsi.jigasi.JigasiBundleActivator;
+
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * This class manages the translations to be done by the transcriber.
@@ -25,7 +29,7 @@ import java.util.*;
  * @author Praveen Kumar Gupta
  */
 public class TranslationManager
-    implements TranscriptionListener
+        implements TranscriptionListener
 {
 
     /**
@@ -38,12 +42,90 @@ public class TranslationManager
      * List of listeners to be notified about a new TranslationResult.
      */
     private final List<TranslationResultListener> listeners
-        = new ArrayList<>();
+            = new ArrayList<>();
 
     /**
      * The translationService to be used for translations.
      */
     private final TranslationService translationService;
+
+    /**
+     * Property name to determine whether to enable translation of interim transcription results.
+     */
+    public static final String P_NAME_ENABLE_PARTIAL_TRANSLATION
+            = "org.jitsi.jigasi.transcription.ENABLE_PARTIAL_TRANSLATION";
+
+    /**
+     * Whether interim transcription results should be translated.
+     */
+    public static final Boolean ENABLE_PARTIAL_TRANSLATION = JigasiBundleActivator.getConfigurationService()
+            .getBoolean(P_NAME_ENABLE_PARTIAL_TRANSLATION, false);
+
+    /**
+     * Property name to determine the translation interval.
+     */
+    public static final String P_NAME_TRANSLATION_INTERVAL = "org.jitsi.jigasi.transcription.TRANSLATION_INTERVAL";
+
+    /**
+     * The translation interval if partial translation is enabled. For example if the translation interval is set to
+     * 5, a partial transcription result is translated every 5 words.
+     */
+    public static final int TRANSLATION_INTERVAL = JigasiBundleActivator.getConfigurationService()
+            .getInt(P_NAME_TRANSLATION_INTERVAL, 5);
+
+    /**
+     * The word count on the previous partial transcription result.
+     */
+    private int previousWordCount = 0;
+
+    /**
+     * The subject(s)-object(o)-verb(v) order of languages supported in Jitsi.
+     * Used for determining whether it is appropriate to do translation on interim/partial transcripts.
+     * When the source language and the target language do not share the same word order, the first half of a phrase in
+     * the source language may correspond to the second half, the center, or the beginning and the end without the
+     * center of a phrase in the target language, making partial translations inappropriate.
+     */
+    private static final Map<String, String> languageWordOrder = Stream.of(new String[][] {
+            {"af", "svo"},
+            {"id", "svo"},
+            {"ms", "svo"},
+            {"ca", "svo"},
+            {"cs", "svo"},
+            {"da", "svo"},
+            {"en", "svo"},
+            {"es", "svo"},
+            {"fr", "svo"},
+            {"gl", "svo"},
+            {"hr", "svo"},
+            {"zu", "vo"}, // the subject is part of the verb compound
+            {"is", "svo"},
+            {"it", "svo"},
+            {"hu", "svo"},
+            {"nl", "svo"},
+            {"nb", "svo"},
+            {"pl", "svo"},
+            {"pt", "svo"},
+            {"ro", "svo"},
+            {"sk", "svo"},
+            {"sl", "sov"},
+            {"fi", "svo"},
+            {"sv", "svo"},
+            {"vn", "svo"},
+            {"tr", "sov"},
+            {"el", "svo"},
+            {"bg", "svo"},
+            {"ru", "svo"},
+            {"sr", "svo"},
+            {"uk", "svo"},
+            {"he", "svo"},
+            {"ar", "vso"},
+            {"fa", "sov"},
+            {"hi", "sov"},
+            {"th", "svo"},
+            {"ko", "sov"},
+            {"jp", "sov"},
+            {"zh", "svo"},
+    }).collect(Collectors.toMap(data -> data[0], data -> data[1]));
 
     /**
      * Initializes the translationManager with a TranslationService
@@ -119,13 +201,14 @@ public class TranslationManager
      * and returns a list of {@link TranslationResult}s.
      *
      * @param result the TranscriptionResult notified to the TranslationManager
+     * @param isTranscriptionResultPartial whether {@code result} is an interim transcription
      * @return list of TranslationResults
      */
     private List<TranslationResult> getTranslations(
-        TranscriptionResult result)
+            TranscriptionResult result, boolean isTranscriptionResultPartial)
     {
         ArrayList<TranslationResult> translatedResults
-            = new ArrayList<>();
+                = new ArrayList<>();
         Set<String> translationLanguages;
 
         synchronized (languages)
@@ -134,25 +217,41 @@ public class TranslationManager
         }
 
         Collection<TranscriptionAlternative> alternatives
-            = result.getAlternatives();
+                = result.getAlternatives();
 
         if (!alternatives.isEmpty())
         {
             for (String targetLanguage : translationLanguages)
             {
-                String translatedText = translationService.translate(
-                    alternatives.iterator().next().getTranscription(),
-                    result.getParticipant().getSourceLanguage(),
-                    targetLanguage);
+                String sourceLanguage = result.getParticipant().getSourceLanguage();
+                String translatedText = null;
+                // partial translation is only appropriate when the source and target languages have the same word order
+                if (!isTranscriptionResultPartial || hasSameWordOrder(sourceLanguage, targetLanguage))
+                {
+                    translatedText = translationService.translate(
+                            alternatives.iterator().next().getTranscription(),
+                            sourceLanguage,
+                            targetLanguage);
+                }
 
                 translatedResults.add(new TranslationResult(
-                    result,
-                    targetLanguage,
-                    translatedText));
+                        result,
+                        targetLanguage,
+                        translatedText));
             }
         }
 
         return translatedResults;
+    }
+
+    /**
+     * {@code isTranscriptionResultPartial} defaults to false.
+     *
+     * @see TranslationManager#getTranslations(TranscriptionResult, boolean)
+     */
+    private List<TranslationResult> getTranslations(TranscriptionResult result)
+    {
+        return getTranslations(result, false);
     }
 
     /**
@@ -165,19 +264,44 @@ public class TranslationManager
     @Override
     public void notify(TranscriptionResult result)
     {
-        if (!result.isInterim())
+        List<TranslationResult> translations;
+
+        if (result.isInterim())
         {
-            List<TranslationResult> translations
-                = getTranslations(result);
-            Iterable<TranslationResultListener> translationResultListeners;
+            if (!ENABLE_PARTIAL_TRANSLATION) return;
+            int resultWordCount = result.getWordCount();
+            if (previousWordCount + TRANSLATION_INTERVAL > resultWordCount) return;
+            previousWordCount = resultWordCount;
+            translations = getTranslations(result, true);
+        }
+        else
+        {
+            translations = getTranslations(result);
+        }
 
-            synchronized (listeners)
-            {
-                translationResultListeners = new ArrayList<>(listeners);
-            }
+        Iterable<TranslationResultListener> translationResultListeners;
 
+        synchronized (listeners)
+        {
+            translationResultListeners = new ArrayList<>(listeners);
+        }
+
+        if (result.isInterim())
+        {
             translationResultListeners.forEach(
-                listener -> translations.forEach(listener::notify));
+                    listener -> translations.forEach(translation -> {
+                        if (hasSameWordOrder(result.getParticipant().getSourceLanguage(),
+                                translation.getLanguage()))
+                        {
+                            listener.notify(translation);
+                        }
+                    }));
+        }
+        else
+        {
+            translationResultListeners.forEach(
+                    listener -> translations.forEach(listener::notify));
+            previousWordCount = 0;
         }
     }
 
@@ -191,5 +315,20 @@ public class TranslationManager
     public void failed(FailureReason reason)
     {
         completed();
+    }
+
+    /**
+     * Returns whether the source language and target language of translation have the same word order.
+     * Word order is defined by the order in which the subject, object and verb are used in a phrase.
+     * @param sourceLang the source language of to translate from
+     * @param targetLang the target language to translate to
+     * @return whether {@code sourceLang} have matching word order with {@code targetLang}
+     */
+    public boolean hasSameWordOrder(String sourceLang, String targetLang)
+    {
+        String sourceWordOrder = languageWordOrder.getOrDefault(sourceLang.substring(0, 2), null);
+        String targetWordOrder = languageWordOrder.getOrDefault(targetLang.substring(0, 2), null);
+        if (sourceWordOrder == null || targetWordOrder == null) return false;
+        return sourceWordOrder.equals(targetWordOrder);
     }
 }
